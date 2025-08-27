@@ -2,8 +2,8 @@ import React, { useEffect } from 'react'
 import { Routes, Route, Link } from 'react-router-dom'
 import LoginPage from './pages/login'
 import RegisterPage from './pages/register'
-import WelcomePage from './pages/index'
 import ProtectedRoute from './components/ProtectedRoute'
+import HomePage from './pages/index'
 import { useDispatch } from 'react-redux'
 import { fetchMe, setInitialized } from './services/authSlice'
 import Layout from './components/Layout'
@@ -26,10 +26,13 @@ export default function App() {
   return (
     <Layout>
       <Routes>
+        <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/welcome" element={<ProtectedRoute><WelcomePage /></ProtectedRoute>} />
-        <Route path="/" element={<LoginPage />} />
+        {/* placeholder routes for future pages */}
+        <Route path="/create" element={<ProtectedRoute><div>Create Quiz page (todo)</div></ProtectedRoute>} />
+        <Route path="/my-quizzes" element={<ProtectedRoute><div>My Quizzes (todo)</div></ProtectedRoute>} />
+        <Route path="/attempts" element={<ProtectedRoute><div>Attempt History (todo)</div></ProtectedRoute>} />
       </Routes>
     </Layout>
   )

@@ -6,7 +6,7 @@ export const attachStore = (store) => { storeRef = store }
 
 // Base URL (adjust if you use VITE env var)
 const API_BASE = import.meta.env.VITE_API_URL
-const USER_PREFIX = '/api/user'
+const USER_PREFIX = 'user'
 
 const api = axios.create({
   baseURL: API_BASE,

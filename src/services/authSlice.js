@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import api from '../api/axios'
 
-const USER_PREFIX = '/api/user'
+const USER_PREFIX = 'user'
 
 export const login = createAsyncThunk('auth/login', async (credentials, { rejectWithValue }) => {
     try {
@@ -9,7 +9,6 @@ export const login = createAsyncThunk('auth/login', async (credentials, { reject
         const me = await api.get(`${USER_PREFIX}/me/`)
         return me.data
     } catch (err) {
-        // normalize server error into something useful
         return rejectWithValue(err.response?.data || { message: err.message })
     }
 })
@@ -25,9 +24,7 @@ export const register = createAsyncThunk('auth/register', async (payload, { reje
 
 export const fetchMe = createAsyncThunk('auth/fetchMe', async (_, { rejectWithValue }) => {
     try {
-        console.log('fetchMe: sending request to /api/user/me/')
         const res = await api.get(`${USER_PREFIX}/me/`)
-        console.log('fetchMe: success', res.data)
         return res.data
     } catch (err) {
         console.warn('fetchMe: failed', err.response?.status, err.response?.data)
