@@ -22,7 +22,7 @@ export default function LoginPage() {
     const onSubmit = async e => {
         e.preventDefault()
         const res = await dispatch(login(form))
-        if (res.type === 'auth/login/fulfilled') navigate('/welcome')
+        if (res.type === 'auth/login/fulfilled') navigate('/')
     }
 
     return (

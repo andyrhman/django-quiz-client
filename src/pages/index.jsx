@@ -1,8 +1,14 @@
+// src/pages/HomePage.jsx
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Row, Col, Badge, Spinner, Pagination } from 'react-bootstrap'
 import api from '../api/axios'
 import QuizCard from '../components/QuizCard'
 
+/**
+ * Build an ordered list of pagination items:
+ * returns an array like [1,2,'ellipsis',5,6,7,'ellipsis',99,100]
+ */
 function buildPaginationPages(current, last, siblings = 2) {
     if (last <= 1) return [1]
     const pages = new Set()
@@ -25,25 +31,29 @@ function buildPaginationPages(current, last, siblings = 2) {
 }
 
 export default function HomePage() {
+    // url search params
+    const [searchParams, setSearchParams] = useSearchParams()
+
+    // local UI state
     const [categories, setCategories] = useState([])
     const [quizzes, setQuizzes] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
-
-    // store selected category as the category NAME (string) because backend expects /?categories=<name>
-    const [selectedCategory, setSelectedCategory] = useState(null)
 
     // pagination state returned from backend meta
     const [page, setPage] = useState(1)
     const [lastPage, setLastPage] = useState(1)
     const [total, setTotal] = useState(0)
 
+    // store selected category as the category NAME (string) because backend expects /?categories=<name>
+    const [selectedCategory, setSelectedCategory] = useState(null)
+
+    // helpers to load data
     const loadCategories = useCallback(async (signal) => {
         const res = await api.get('/categories/', { signal })
         return res.data || []
     }, [])
 
-    // fetch quiz page (with optional category name filter)
     const loadQuizPage = useCallback(async (pageNum = 1, categoryName = null, signal) => {
         // Only include page param when page > 1 so backend can accept requests like ?categories=Cloud%20Computing
         const params = {}
@@ -53,22 +63,32 @@ export default function HomePage() {
         return res.data
     }, [])
 
+    // When search params change (user navigates or page loaded with query),
+    // sync them into local state.
+    useEffect(() => {
+        const urlPage = parseInt(searchParams.get('page')) || 1
+        const urlCategory = searchParams.get('categories') || null
+
+        // Only update state if different to avoid unnecessary reloads
+        setPage(prev => (prev !== urlPage ? urlPage : prev))
+        setSelectedCategory(prev => (prev !== urlCategory ? urlCategory : prev))
+        // note: quizzes will be fetched by the other effect watching page/selectedCategory
+    }, [searchParams])
+
     // load categories once
     useEffect(() => {
         let cancelled = false
         const controller = new AbortController()
+
         async function init() {
-            setLoading(true)
-            setError(null)
             try {
                 const cats = await loadCategories(controller.signal)
                 if (!cancelled) setCategories(cats)
             } catch (err) {
                 if (!cancelled) setError(err.response?.data || err.message || 'Failed to load categories')
-            } finally {
-                // let quiz fetch handle end of loading
             }
         }
+
         init()
         return () => { cancelled = true; controller.abort() }
     }, [loadCategories])
@@ -98,20 +118,46 @@ export default function HomePage() {
         return () => { cancelled = true; controller.abort() }
     }, [page, selectedCategory, loadQuizPage])
 
-    // when selectedCategory changes, reset to page 1
+    // when selectedCategory changes reset page to 1 AND update URL
     useEffect(() => {
-        setPage(1)
-    }, [selectedCategory])
+        // we must push the change into the URL so the address bar matches the filter
+        // build new params - omit page when page === 1
+        const params = {}
+        if (selectedCategory) params.categories = selectedCategory
+        // keep page param only if > 1
+        if (page > 1) params.page = page
+        setSearchParams(params, { replace: true })
+        // ensure page state is 1 when category changed and url didn't have page
+        if (page !== 1) setPage(1)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedCategory]) // intentionally only when category changes
 
-    const pages = buildPaginationPages(page, lastPage, 2)
+    // when page changes (via UI), update URL accordingly
+    useEffect(() => {
+        // avoid overwriting category when page changes; keep categories param if present
+        const params = {}
+        if (selectedCategory) params.categories = selectedCategory
+        if (page > 1) params.page = page
+        setSearchParams(params, { replace: true })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page]) // intentionally only when page changes
+
+    // UI handlers (these update state which in turn update URL via effects above)
+    const onSelectCategory = (catName) => {
+        setSelectedCategory(catName) // effect will reset page to 1 and update URL
+    }
+
     const onClickPage = (p) => {
         if (p === 'ellipsis') return
         if (p < 1 || p > lastPage) return
         setPage(p)
         window.scrollTo({ top: 0, behavior: 'smooth' })
     }
+
     const onPrev = () => { if (page > 1) setPage(page - 1) }
     const onNext = () => { if (page < lastPage) setPage(page + 1) }
+
+    const pages = buildPaginationPages(page, lastPage, 2)
 
     return (
         <div>
@@ -124,7 +170,7 @@ export default function HomePage() {
                             bg={selectedCategory === null ? 'primary' : 'secondary'}
                             className="me-2"
                             style={{ cursor: 'pointer' }}
-                            onClick={() => setSelectedCategory(null)}
+                            onClick={() => onSelectCategory(null)}
                         >
                             All
                         </Badge>
@@ -136,7 +182,7 @@ export default function HomePage() {
                                 bg={selectedCategory === cat.name ? 'primary' : 'secondary'}
                                 className="me-2"
                                 style={{ cursor: 'pointer' }}
-                                onClick={() => setSelectedCategory(cat.name)}
+                                onClick={() => onSelectCategory(cat.name)}
                             >
                                 {cat.name}
                             </Badge>

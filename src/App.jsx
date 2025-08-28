@@ -7,6 +7,7 @@ import HomePage from './pages/index'
 import { useDispatch } from 'react-redux'
 import { fetchMe, setInitialized } from './services/authSlice'
 import Layout from './components/Layout'
+import CreateQuizPage from './pages/create_quiz_page.jsx'
 
 export default function App() {
   const dispatch = useDispatch()
@@ -30,7 +31,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         {/* placeholder routes for future pages */}
-        <Route path="/create" element={<ProtectedRoute><div>Create Quiz page (todo)</div></ProtectedRoute>} />
+        <Route path="/create" element={<ProtectedRoute><CreateQuizPage /></ProtectedRoute>} />
         <Route path="/my-quizzes" element={<ProtectedRoute><div>My Quizzes (todo)</div></ProtectedRoute>} />
         <Route path="/attempts" element={<ProtectedRoute><div>Attempt History (todo)</div></ProtectedRoute>} />
       </Routes>
