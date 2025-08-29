@@ -38,7 +38,8 @@ export default function MainNavbar() {
                                 className="ms-2"
                             >
                                 Create Quiz
-                            </Button><NavDropdown
+                            </Button>
+                            <NavDropdown
                                 title={user.username || user.email}
                                 id="user-dropdown"
                                 align="end"

@@ -22,7 +22,9 @@ export default function LoginPage() {
     const onSubmit = async e => {
         e.preventDefault()
         const res = await dispatch(login(form))
-        if (res.type === 'auth/login/fulfilled') navigate('/')
+        if (res.meta?.requestStatus === 'fulfilled') {
+            navigate('/')
+        }
     }
 
     return (
