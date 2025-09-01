@@ -10,6 +10,7 @@ import Layout from './components/Layout'
 import CreateQuizPage from './pages/create_quiz_page.jsx'
 import MyQuizzesPage from './pages/my_quizzes_page.jsx'
 import EditQuizPage from './pages/edit_quiz_page.jsx'
+import QuizPreviewPage from './pages/quiz_preview_page.jsx'
 
 export default function App() {
   const dispatch = useDispatch()
@@ -35,7 +36,8 @@ export default function App() {
         {/* placeholder routes for future pages */}
         <Route path="/create" element={<ProtectedRoute><CreateQuizPage /></ProtectedRoute>} />
         <Route path="/my-quizzes" element={<ProtectedRoute><MyQuizzesPage /></ProtectedRoute>} />
-        <Route path="/my-quizzes/edit/:quizId" element={<ProtectedRoute><EditQuizPage/></ProtectedRoute>} />
+        <Route path="/my-quizzes/edit/:quizId" element={<ProtectedRoute><EditQuizPage /></ProtectedRoute>} />
+        <Route path="/quiz/:quizId/preview" element={<ProtectedRoute><QuizPreviewPage /></ProtectedRoute>} />
         <Route path="/attempts" element={<ProtectedRoute><div>Attempt History (todo)</div></ProtectedRoute>} />
       </Routes>
     </Layout>

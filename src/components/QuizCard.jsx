@@ -39,6 +39,7 @@ export default function QuizCard({ quiz }) {
 
                         <div className="d-flex gap-2">
                             <Button as={Link} to={`/quiz/${quiz.id}`} variant="primary" size="sm">Attempt</Button>
+                            <Button as={Link} to={`/quiz/${quiz.id}/preview`} variant="outline-secondary" size="sm">Preview</Button>
                         </div>
                     </Col>
                 </Row>

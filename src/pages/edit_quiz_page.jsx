@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
     Row, Col, Card, Form, Button, Spinner, Pagination, Modal, InputGroup, Alert, Badge
 } from 'react-bootstrap'
 import api from '../api/axios'
 
+// small error formatter
 function formatError(err) {
     if (!err) return null
     if (typeof err === 'string') return err
@@ -25,6 +26,9 @@ const MAX_SINGLE = 4
 const MAX_MULTI = 5
 const genLocalId = () => Math.random().toString(36).slice(2, 9)
 
+/* -------------------------
+   Memoized Option Row
+   ------------------------- */
 const OptionRow = React.memo(function OptionRow({
     opt,
     questionType,
@@ -61,6 +65,9 @@ const OptionRow = React.memo(function OptionRow({
     )
 })
 
+/* -------------------------
+   Memoized EditQuestionModal
+   ------------------------- */
 const EditQuestionModal = React.memo(function EditQuestionModal({
     show,
     onHide,
@@ -73,7 +80,9 @@ const EditQuestionModal = React.memo(function EditQuestionModal({
     removeEditOption,
     optionBusy,
     optionError,
-    saveEditingQuestion
+    saveEditingQuestion,
+    savingQuestion,
+    onChangeQuestionType
 }) {
     if (!editingQuestion) return null
     const q = editingQuestion
@@ -93,11 +102,17 @@ const EditQuestionModal = React.memo(function EditQuestionModal({
                     <Form.Control as="textarea" rows={3} value={q.question} onChange={e => setEditField('question', e.target.value)} />
                 </Form.Group>
 
+                {/* explanation textarea */}
+                <Form.Group className="mb-2">
+                    <Form.Label>Explanation (optional)</Form.Label>
+                    <Form.Control as="textarea" rows={2} value={q.explanation || ''} onChange={e => setEditField('explanation', e.target.value)} placeholder="Explain the answer..." />
+                </Form.Group>
+
                 <Row className="mb-2">
                     <Col md={4}>
                         <Form.Group>
                             <Form.Label>Type</Form.Label>
-                            <Form.Select value={q.question_type} onChange={e => setEditField('question_type', e.target.value)}>
+                            <Form.Select value={q.question_type} onChange={e => onChangeQuestionType(e.target.value)}>
                                 <option value="single">single</option>
                                 <option value="multiple">multiple</option>
                             </Form.Select>
@@ -140,22 +155,46 @@ const EditQuestionModal = React.memo(function EditQuestionModal({
             </Modal.Body>
 
             <Modal.Footer>
-                <Button variant="secondary" onClick={onHide}>Cancel</Button>
-                <Button variant="primary" onClick={saveEditingQuestion}>{isCreateMode ? 'Create' : 'Save'}</Button>
+                <Button variant="secondary" onClick={onHide} disabled={savingQuestion}>Cancel</Button>
+                <Button variant="primary" onClick={saveEditingQuestion} disabled={savingQuestion}>
+                    {savingQuestion ? (<><Spinner size="sm" animation="border" /> {isCreateMode ? 'Creating...' : 'Saving...'}</>) : (isCreateMode ? 'Create' : 'Save')}
+                </Button>
             </Modal.Footer>
         </Modal>
     )
 })
 
+/* -------------------------
+   Small Delete modal
+   ------------------------- */
+function DeleteQuestionModal({ show, onHide, confirmDelete, deleting, deleteError }) {
+    return (
+        <Modal show={show} onHide={onHide} centered>
+            <Modal.Header closeButton><Modal.Title>Delete question</Modal.Title></Modal.Header>
+            <Modal.Body>
+                Are you sure you want to delete this question? This action cannot be undone.
+                {deleteError && <div className="text-danger mt-2">{deleteError}</div>}
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={onHide} disabled={deleting}>Cancel</Button>
+                <Button variant="danger" onClick={confirmDelete} disabled={deleting}>
+                    {deleting ? (<><Spinner size="sm" animation="border" /> Deleting...</>) : 'Delete'}
+                </Button>
+            </Modal.Footer>
+        </Modal>
+    )
+}
+
+/* -------------------------
+   Main Page Component
+   ------------------------- */
 export default function EditQuizPage() {
     const { quizId } = useParams()
     const [searchParams, setSearchParams] = useSearchParams()
     const navigate = useNavigate()
 
-    // stepper
     const [step, setStep] = useState(1)
 
-    // step 1: quiz info
     const [quizInfo, setQuizInfo] = useState(null)
     const [categories, setCategories] = useState([])
     const [loadingInfo, setLoadingInfo] = useState(true)
@@ -163,34 +202,30 @@ export default function EditQuizPage() {
     const [savingInfo, setSavingInfo] = useState(false)
     const [saveInfoMsg, setSaveInfoMsg] = useState(null)
 
-    // step 2: questions pagination
     const [questions, setQuestions] = useState([])
     const [questionsLoading, setQuestionsLoading] = useState(true)
     const [questionsError, setQuestionsError] = useState(null)
     const [questionsMeta, setQuestionsMeta] = useState({ page: 1, last_page: 1, total: 0 })
 
-    // edit/create modal controlled state
     const [showEditModal, setShowEditModal] = useState(false)
     const [editingQuestion, setEditingQuestion] = useState(null)
     const [isCreateMode, setIsCreateMode] = useState(false)
 
-    // option / question errors/flows
     const [optionBusy, setOptionBusy] = useState(false)
     const [optionError, setOptionError] = useState(null)
 
-    // delete question flow
+    const [savingQuestion, setSavingQuestion] = useState(false) // spinner state for create/update
+
     const [showDeleteQuestionModal, setShowDeleteQuestionModal] = useState(false)
     const [deletingQuestionId, setDeletingQuestionId] = useState(null)
     const [deletingQuestion, setDeletingQuestion] = useState(false)
     const [deleteQuestionError, setDeleteQuestionError] = useState(null)
 
-    // fetch categories
     const loadCategories = useCallback(async (signal) => {
         const res = await api.get('/categories/', { signal })
         return res.data || []
     }, [])
 
-    // fetch quiz info (GET /quizinfo/:id)
     const loadQuizInfo = useCallback(async () => {
         setLoadingInfo(true)
         setInfoError(null)
@@ -204,19 +239,17 @@ export default function EditQuizPage() {
         }
     }, [quizId])
 
-    // fetch questions page (GET /quizinfo/:id/with-questions/?question_page=)
+    // NOTE: use the preview endpoint (server returns `explanation` in questions)
     const loadQuestionPage = useCallback(async (pageNum = 1, signal) => {
         const params = {}
         if (pageNum > 1) params.question_page = pageNum
-        const res = await api.get(`/quizinfo/${quizId}/with-questions/`, { params, signal })
+        const res = await api.get(`/quizinfo/preview/${quizId}/with-questions-explanation/`, { params, signal })
         return res.data
     }, [quizId])
 
-    // initial load: categories + quiz info
     useEffect(() => {
         let cancelled = false
         const controller = new AbortController()
-
         async function init() {
             try {
                 const cats = await loadCategories(controller.signal)
@@ -229,16 +262,12 @@ export default function EditQuizPage() {
         return () => { cancelled = true; controller.abort() }
     }, [loadCategories])
 
-    useEffect(() => {
-        loadQuizInfo()
-    }, [loadQuizInfo])
+    useEffect(() => { loadQuizInfo() }, [loadQuizInfo])
 
-    // sync question_page from URL
     const urlPage = Number(searchParams.get('question_page')) || 1
     useEffect(() => {
         let cancelled = false
         const controller = new AbortController()
-
         async function fetchQuestions() {
             setQuestionsLoading(true)
             setQuestionsError(null)
@@ -253,12 +282,10 @@ export default function EditQuizPage() {
                 if (!cancelled) setQuestionsLoading(false)
             }
         }
-
         fetchQuestions()
         return () => { cancelled = true; controller.abort() }
     }, [loadQuestionPage, urlPage])
 
-    // --- Step 1 handlers ---
     const onChangeInfo = useCallback((e) => {
         const { name, value } = e.target
         setQuizInfo(prev => ({ ...prev, [name]: name === 'time_limit' ? Number(value) : value }))
@@ -285,7 +312,6 @@ export default function EditQuizPage() {
         }
     }, [quizInfo, quizId, loadQuizInfo])
 
-    // --- Helpers for edit modal (all handlers memoized) ---
     const normalizeOptionsForEdit = useCallback((opts, requiredCount) => {
         const arr = (opts || []).map(o => ({
             id: o.id,
@@ -303,6 +329,7 @@ export default function EditQuizPage() {
         setEditingQuestion({
             id: q.id,
             question: q.question || '',
+            explanation: q.explanation || '',
             question_no: q.question_no || 1,
             question_type: q.question_type || 'single',
             points: q.points || 1,
@@ -320,6 +347,7 @@ export default function EditQuizPage() {
         setEditingQuestion({
             id: undefined,
             question: '',
+            explanation: '',
             question_no: nextNo,
             question_type: defaultType,
             points: 1,
@@ -439,8 +467,10 @@ export default function EditQuizPage() {
     const saveEditingQuestion = useCallback(async () => {
         if (!editingQuestion) return
         setOptionError(null)
+        setSavingQuestion(true)
         const q = {
             question: editingQuestion.question,
+            explanation: editingQuestion.explanation || '',
             question_no: Number(editingQuestion.question_no),
             question_type: editingQuestion.question_type,
             points: Number(editingQuestion.points),
@@ -455,6 +485,7 @@ export default function EditQuizPage() {
         const err = validateEditing(q)
         if (err) {
             setOptionError(err)
+            setSavingQuestion(false)
             return
         }
 
@@ -478,10 +509,11 @@ export default function EditQuizPage() {
             }
         } catch (e) {
             setOptionError(formatError(e.response?.data || e.message))
+        } finally {
+            setSavingQuestion(false)
         }
     }, [editingQuestion, isCreateMode, quizId, validateEditing, loadQuestionPage, urlPage, setSearchParams])
 
-    // --- Delete question ---
     const confirmDeleteQuestion = useCallback((id) => {
         setDeletingQuestionId(id)
         setDeleteQuestionError(null)
@@ -507,7 +539,6 @@ export default function EditQuizPage() {
         }
     }, [deletingQuestionId, loadQuestionPage, setSearchParams])
 
-    // Pagination helpers
     const goToQuestionPage = useCallback((p) => {
         if (p === 'ellipsis') return
         const params = {}
@@ -527,7 +558,6 @@ export default function EditQuizPage() {
         return out
     }, [])
 
-    // Render
     return (
         <div>
             <Row className="mb-3">
@@ -614,6 +644,7 @@ export default function EditQuizPage() {
                                                         <Col md={8}>
                                                             <strong>#{q.question_no}</strong> {q.question}
                                                             <div className="small text-muted">Type: {q.question_type} — Points: {q.points}</div>
+                                                            {q.explanation && <div className="mt-2"><strong>Explanation:</strong> <div className="small text-muted">{q.explanation}</div></div>}
                                                             <ul>{(q.options || []).map(o => <li key={o.id}>{o.text} {o.is_correct ? <Badge bg="success" className="ms-2">correct</Badge> : null}</li>)}</ul>
                                                         </Col>
                                                         <Col md={4} className="d-flex flex-column justify-content-between align-items-end">
@@ -661,6 +692,8 @@ export default function EditQuizPage() {
                             optionBusy={optionBusy}
                             optionError={optionError}
                             saveEditingQuestion={saveEditingQuestion}
+                            savingQuestion={savingQuestion}
+                            onChangeQuestionType={onChangeQuestionType}
                         />
 
                         <DeleteQuestionModal
@@ -701,6 +734,7 @@ export default function EditQuizPage() {
                                                         <Col md={8}>
                                                             <strong>#{q.question_no}</strong> {q.question}
                                                             <div className="small text-muted">Type: {q.question_type} — Points: {q.points}</div>
+                                                            {q.explanation && <div className="mt-2"><strong>Explanation:</strong> <div className="small text-muted">{q.explanation}</div></div>}
                                                             <ul>{(q.options || []).map(o => <li key={o.id}>{o.text} {o.is_correct ? <Badge bg="success" className="ms-2">correct</Badge> : null}</li>)}</ul>
                                                         </Col>
                                                         <Col md={4} className="d-flex flex-column justify-content-between align-items-end">
@@ -738,24 +772,7 @@ export default function EditQuizPage() {
                     </Col>
                 </Row>
             )}
-        </div>
-    )
-}
 
-function DeleteQuestionModal({ show, onHide, confirmDelete, deleting, deleteError }) {
-    return (
-        <Modal show={show} onHide={onHide} centered>
-            <Modal.Header closeButton><Modal.Title>Delete question</Modal.Title></Modal.Header>
-            <Modal.Body>
-                Are you sure you want to delete this question? This action cannot be undone.
-                {deleteError && <div className="text-danger mt-2">{deleteError}</div>}
-            </Modal.Body>
-            <Modal.Footer>
-                <Button variant="secondary" onClick={onHide} disabled={deleting}>Cancel</Button>
-                <Button variant="danger" onClick={confirmDelete} disabled={deleting}>
-                    {deleting ? (<><Spinner size="sm" animation="border" /> Deleting...</>) : 'Delete'}
-                </Button>
-            </Modal.Footer>
-        </Modal>
+        </div>
     )
 }
